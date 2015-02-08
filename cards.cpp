@@ -199,7 +199,9 @@ int parseCardFile(const char* filename, std::vector<Card> &cards){
 					Card c(s, r);
 					hand.push_back(c);
 				}
+				
 				if (hand.size() != 5){
+					
 					handleErrMessages(program_name, "Hands should only have 5 cards");
 					toReturn = BADNUMBEROFCARDSINHAND;
 				}
@@ -219,32 +221,41 @@ int parseCardFile(const char* filename, std::vector<Card> &cards){
 }
 
 /*
-How it works. The highest rank a card can have is 12 (0..12) as defined
-by the enum. There are 9 possible types of hands. That means I can return an integer
-from 0 to <9x12^15 to represent what type of hand it is, AND sort hands based on the rank of the cards 
-by adding all card ranks together. These can be further sorted by 
-giving each card a weight from 1to13 (13 for cards that do matter, 1 for cards that dont) and multiplying the rank by that weight.
-This means among the possible hands of rank 1 there are <55*12^5 different ways to order that hand.
-I need to do this due to the arbitrary conditions for sorting an individual hand
-The max number returned is is around 200 million for 5 aces which there simply cannot be, still this is 
-less than the size of an unsigned int but more than the number of possible hands in a poker deck.
-This is due to the fact I must sort hands in different ways depending on what hand shows up.
+How it works.
+Each card gets a weight depending on the individual ranking scheme for that hand
+The weight is multiplied by the rank to determin that cards value. Values are added
+cards with a higher value are better hands than cards with a lesser value.
+For this to work the weights must satisfy the inequality
+a> 13*b + 13*c + 13*d+e; b> 13*c + 13*d + 13*e; c > 13*d + 13*e
+setting e to 1
+d = 14, c = 196, b = 2744, a = 38416 satisfies this inequality.
+The max rank for a hand is therefore a+b+c+d+e or 537823.
+I can order the hands by multiplying a rank by some integer below
+This allows me to sort and check if hands are equal.
 */
-const int UNRANKED = 1,
-ONEPAIR = 2,
-TWOPAIR = 3,
-THREEKIND = 4,
-STRAIT = 5,
-FLUSH = 6,
-FULLHOUSE = 7,
-FOURKIND = 8,
-STRAITFLUSH = 9;
+const unsigned int UNRANKED = 0,
+ONEPAIR = 1,
+TWOPAIR = 2,
+THREEKIND = 3,
+STRAIT = 4,
+FLUSH = 5,
+FULLHOUSE = 6,
+FOURKIND = 7,
+STRAITFLUSH = 8;
 
+const unsigned int CARDWEIGHT_A = 38416,
+CARDWEIGHT_B = 2744,
+CARDWEIGHT_C = 196,
+CARDWEIGHT_D = 14,
+CARDWEIGHT_E = 1;
+
+const unsigned int CARDWEIGHT_TOTAL = (CARDWEIGHT_A + CARDWEIGHT_B + CARDWEIGHT_C + CARDWEIGHT_D + CARDWEIGHT_E) * 13;
 unsigned int checkHand(std::vector<Card> &cards){
 	std::sort(cards.begin(), cards.end());
 	int numSpades = 0, numClubs = 0, numDiamonds = 0, numHearts = 0, numSame = 0, numConsecutive = 0;
 	int numBreaks = 0;//Check for when cards stop being same value
 
+	
 	for (auto it = cards.begin(); it != cards.end()-1; ++it){
 		switch (it->suit){
 		case Card::SUIT::clubs:
@@ -295,39 +306,40 @@ unsigned int checkHand(std::vector<Card> &cards){
 		//check strait flush
 		if (numSpades == 5 || numClubs == 5 || numDiamonds == 5 || numHearts == 5){
 			//two straight flush hands are sorted by the highest card in each hand;
-			return STRAITFLUSH * (5 + 4 + 3 + 2 + 1)*cards[4].rank;
+			return STRAITFLUSH *CARDWEIGHT_TOTAL + (CARDWEIGHT_A + CARDWEIGHT_B + CARDWEIGHT_C + CARDWEIGHT_D + CARDWEIGHT_E)*cards[4].rank;
 		}
 		//two straight hands are sorted by the highest card in each hand;
-		return STRAIT * (5 + 4 + 3 + 2 + 1)*cards[4].rank;
-		//return "Strait";
+		return STRAIT * CARDWEIGHT_TOTAL + (CARDWEIGHT_A + CARDWEIGHT_B + CARDWEIGHT_C + CARDWEIGHT_D + CARDWEIGHT_E)*cards[4].rank;
+
 	}
 	//suits.
 	if (numSpades == 5 || numClubs == 5 || numDiamonds == 5 || numHearts == 5){
 		//two flush hands are sorted by highest ranking card, then by the next highest ranking card, etc.;
-		return FLUSH * (5 * cards[4].rank + 4 * cards[3].rank + 3 * cards[2].rank + 2 * cards[1].rank + 1 * cards[0].rank);
-		//return "Flush";
+		return FLUSH *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[4].rank + CARDWEIGHT_B * cards[3].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D * cards[1].rank + CARDWEIGHT_E * cards[0].rank);
+		
 	}
 	
 	if (numSame == 3){//could be four of a kind or full house
 		//in four of a kind the third card always equals the second and the fourth
 		if ((cards.begin() + 2)->rank == (cards.begin() + 1)->rank && (cards.begin() + 2)->rank == (cards.begin() + 3)->rank){
 			//two four of a kind hands are sorted by the rank of the 4 cards that have the same rank;
-			//due to sorting cards 1,2,and 3 (zero indexed) are always in
+			//due to sorting cards 1,2,and 3 (zero indexed) are always in THE FOUR KIND
 			//I picked 2 because computer sciencentist love 2
-			return FOURKIND*(5 + 4 + 3 + 2 + 1)*cards[2].rank;
-			//return "Four of a Kind";
+			return FOURKIND*CARDWEIGHT_TOTAL + (CARDWEIGHT_A + CARDWEIGHT_B + CARDWEIGHT_C + CARDWEIGHT_D + CARDWEIGHT_E)*cards[2].rank;
+		
 		}
 		else{
 			//two full house hands are sorted by the rank of the 3 cards that have the same rank and then by the rank of the 2 cards that have the same rank;
 			//full house is 3 of a kind followed by two of a kind, i need to adjust for if the three of a kind is at the begining or the end.
-			//simple enough if card at position 1 == card at position 2 it is at the end
-			//the three pairs are at the other end, then its just basic math
+			//simple enough if card at position 1 == card at position 2 it is at the BEGINNING
+
 			if (cards[1].rank == cards[2].rank){
-				return FULLHOUSE * (5 * cards[0].rank + 4 * cards[1].rank + 3 * cards[2].rank + 2 * cards[3].rank + 1 * cards[4].rank);
+				return FULLHOUSE *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[0].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D * cards[3].rank + CARDWEIGHT_E * cards[4].rank);
 			}else{
-				return FULLHOUSE * (5 * cards[2].rank + 4 * cards[3].rank + 3 * cards[4].rank + 2 * cards[0].rank + 1 * cards[1].rank);
+
+				return FULLHOUSE *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[2].rank + CARDWEIGHT_B * cards[3].rank + CARDWEIGHT_C * cards[4].rank + CARDWEIGHT_D * cards[0].rank + CARDWEIGHT_E * cards[1].rank);
 			}
-			//return "Full House";
+		
 		}	
 	}
 	if (numSame == 2){ // three of kind or 2 pair
@@ -335,16 +347,16 @@ unsigned int checkHand(std::vector<Card> &cards){
 		//two three of a kind hands are sorted by the rank of the 3 cards that have the same rank;
 
 		if (cards.begin()->rank == (cards.begin() + 2)->rank){
-			return THREEKIND * (5 * cards[0].rank + 4 * cards[1].rank + 3 * cards[2].rank );
+			return THREEKIND *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[0].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D + CARDWEIGHT_E);
 
 		}if( (cards.begin() + 4)->rank == (cards.begin() + 2)->rank){
-			return THREEKIND * (5 * cards[4].rank + 4 * cards[3].rank + 3 * cards[2].rank );
+			return THREEKIND *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[4].rank + CARDWEIGHT_B * cards[3].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D + CARDWEIGHT_E);
 
-			//return "Three of a Kind";
+		
 		}
 		if ((cards.begin() + 1)->rank == (cards.begin() + 2)->rank && (cards.begin() + 2) == (cards.begin() + 3)){ //check if middle cards are equal
-			return THREEKIND * (5 * cards[1].rank + 4 * cards[2].rank + 3 * cards[3].rank );
-			//return "Three of a kind";
+			return THREEKIND *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[1].rank + CARDWEIGHT_B * cards[2].rank + CARDWEIGHT_C * cards[3].rank + CARDWEIGHT_D + CARDWEIGHT_E);
+			
 		}
 		//two two pair hands are sorted by the rank of the higher pair, then by the rank of the lower pair, and then by the 5th card;
 		
@@ -354,15 +366,15 @@ unsigned int checkHand(std::vector<Card> &cards){
 		//we sort those cards by the above.
 		
 		//middle
-		if ((cards.begin() + 2)->rank != (cards.begin() + 3)->rank){
+		if ((cards.begin() + 2)->rank != (cards.begin() + 3)->rank && (cards.begin() + 2)->rank != (cards.begin() + 1)->rank){
 			//paris are at positions 0,1 & 3,4
 			//check if higher rank is at position 1 or 3.
 			if ((cards.begin() + 1)->rank > (cards.begin() + 3)->rank){
-				return TWOPAIR * (5 * cards[0].rank + 4 * cards[1].rank + 3 * cards[3].rank + 2 * cards[4].rank + 1 * cards[2].rank);
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[0].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C * cards[3].rank + CARDWEIGHT_D * cards[4].rank + CARDWEIGHT_E * cards[2].rank);
 
 			}
 			else{//equalto is trivial
-				return TWOPAIR * (5 * cards[3].rank + 4 * cards[4].rank + 3 * cards[0].rank + 2 * cards[1].rank + 1 * cards[2].rank);
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[3].rank + CARDWEIGHT_B * cards[4].rank + CARDWEIGHT_C * cards[0].rank + CARDWEIGHT_D * cards[1].rank + CARDWEIGHT_E * cards[2].rank);
 
 			}
 		}
@@ -371,65 +383,120 @@ unsigned int checkHand(std::vector<Card> &cards){
 			//paris are at positions 1,2 & 3,4
 			//check if higher rank is at position 2 or 3.
 			if ((cards.begin() + 2)->rank > (cards.begin() + 3)->rank){
-				return TWOPAIR * (5 * cards[1].rank + 4 * cards[2].rank + 3 * cards[3].rank + 2 * cards[4].rank + 1 * cards[0].rank);
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[2].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C * cards[3].rank + CARDWEIGHT_D * cards[4].rank + CARDWEIGHT_E * cards[0].rank);
 
 			}
 			else{//equalto is trivial
-				return TWOPAIR * (5 * cards[3].rank + 4 * cards[4].rank + 3 * cards[1].rank + 2 * cards[2].rank + 1 * cards[0].rank);
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[3].rank + CARDWEIGHT_B * cards[4].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D * cards[1].rank + CARDWEIGHT_E * cards[0].rank);
 
 			}
 		}
 		//end
 		else{
-			//paris are at positions 0,1 & 2,3
+			//pairs are at positions 0,1 & 2,3
 			//check if higher rank is at position 1 or 3.
-			if ((cards.begin() + 2)->rank > (cards.begin() + 3)->rank){
-				return TWOPAIR * (5 * cards[1].rank + 4 * cards[2].rank + 3 * cards[3].rank + 2 * cards[4].rank + 1 * cards[0].rank);
+			if ((cards.begin() + 1)->rank > (cards.begin() + 3)->rank){
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[0].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D * cards[3].rank + CARDWEIGHT_E * cards[4].rank);
 
 			}
 			else{//equalto is trivial
-				return TWOPAIR * (5 * cards[3].rank + 4 * cards[4].rank + 3 * cards[1].rank + 2 * cards[2].rank + 1 * cards[0].rank);
+				return TWOPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[2].rank + CARDWEIGHT_B * cards[3].rank + CARDWEIGHT_C * cards[0].rank + CARDWEIGHT_D * cards[1].rank + CARDWEIGHT_E * cards[4].rank);
 
 			}
 		}
 	}
 	if (numSame == 1){
 		//two one pair hands are sorted by the rank of the pair, then by the highest unpaired card, then the next highest unpaired card, and then by the next highest unpaired card;
-		//for this to work the weight of the pair must satisfy the inequality
-		//2x > 13+12+11 The 13+12+11 comes from the highest possible sum of cards
-		//number the other 3 cards could have that being a A,K,Q or 13*3+12*3+11*3
 		//one card of the pair will always be at positions 1,2,3. I then check adjacents
 		if ((cards.begin() + 1)->rank == (cards.begin() + 0)->rank){
-			return ONEPAIR * (20 * cards[0].rank + 20 * cards[1].rank + cards[4].rank +  cards[3].rank +  cards[2].rank);
+			return ONEPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[0].rank + CARDWEIGHT_B * cards[1].rank + CARDWEIGHT_C *cards[4].rank + CARDWEIGHT_D * cards[3].rank + CARDWEIGHT_E* cards[2].rank);
 
 		}
 		if ((cards.begin() + 1)->rank == (cards.begin() + 2)->rank){
-			return ONEPAIR * (20 * cards[1].rank + 20 * cards[2].rank +  cards[4].rank +  cards[3].rank +  cards[0].rank);
+			return ONEPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[1].rank + CARDWEIGHT_B * cards[2].rank + CARDWEIGHT_C *cards[4].rank + CARDWEIGHT_D* cards[3].rank + CARDWEIGHT_E* cards[0].rank);
 
 		}
 		if ((cards.begin() + 2)->rank == (cards.begin() + 3)->rank){
-			return ONEPAIR * (20 * cards[2].rank + 20 * cards[3].rank + cards[4].rank + cards[1].rank + cards[0].rank);
+			return ONEPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A * cards[2].rank + CARDWEIGHT_B * cards[3].rank + CARDWEIGHT_C*cards[4].rank + CARDWEIGHT_D*cards[1].rank + CARDWEIGHT_E*cards[0].rank);
 
 		}
 		if ((cards.begin() + 3)->rank == (cards.begin() + 4)->rank){
-			return ONEPAIR * (20* cards[3].rank + 20 * cards[4].rank + cards[2].rank + cards[1].rank +  cards[0].rank);
+			return ONEPAIR *CARDWEIGHT_TOTAL + (CARDWEIGHT_A* cards[3].rank + CARDWEIGHT_B * cards[4].rank + CARDWEIGHT_C * cards[2].rank + CARDWEIGHT_D * cards[1].rank + CARDWEIGHT_E* cards[0].rank);
 
 		}
 	}
 	//two unranked hands are sorted by highest ranking card, then by the next highest ranking card, etc.
-	return UNRANKED * ( cards[4].rank +  cards[3].rank +  cards[2].rank +  cards[1].rank + cards[0].rank);
+	
+	return UNRANKED *CARDWEIGHT_TOTAL + (CARDWEIGHT_A* cards[4].rank + CARDWEIGHT_B* cards[3].rank + CARDWEIGHT_C* cards[2].rank + CARDWEIGHT_D* cards[1].rank + CARDWEIGHT_E*cards[0].rank);
 }
-
+bool handComparator(std::vector<Card>& hand1, std::vector<Card>& hand2){
+	float hand1_value = std::ceil(((float)checkHand(hand1)) / ((float)(CARDWEIGHT_TOTAL)));
+	float hand2_value = std::ceil(((float)checkHand(hand2)) / ((float)(CARDWEIGHT_TOTAL)));
+	return hand1_value < hand2_value;
+}
 int printCards( std::vector<Card> &cards){
 	//EX Three of Diamonds
 	try{
 
-		//Print Hand
+		
+		//sort hands
+		std::vector<std::vector<Card>> hands;
 		for (auto it = cards.begin(); it != cards.end(); it += 5){
 			
 			std::vector<Card> hand;
 			std::copy(it, it + 5, std::back_inserter(hand));
-			std::cout << checkHand(hand) << std::endl;
+			hands.push_back(hand);
+			
+		}
+		std::sort(hands.begin(), hands.end(), handComparator);
+		//print hands
+		for (auto it = hands.begin(); it != hands.end(); it++){
+			
+			auto h = *it;
+			for (auto i = h.begin(); i != h.end(); ++i){
+				std::cout << Card::rankMap[i->rank] << Card::suitMap[i->suit] << " ";
+			}
+			std::cout << std::endl;
+
+			unsigned int hand_value = (unsigned int)std::ceil(((float)checkHand(h)) / ((float)(CARDWEIGHT_TOTAL)));
+
+			switch (hand_value)
+			{//must use + 1 to convert zero indexing to 1 indexing
+				case UNRANKED + 1:
+					std::cout << "Unranked" << std::endl;
+				break;
+
+				case ONEPAIR + 1:
+					std::cout << "One Pair" << std::endl;
+					break;
+
+				case TWOPAIR + 1:
+					std::cout << "Two Pair" << std::endl;
+					break;
+
+				case THREEKIND + 1:
+					std::cout << "Three Pair" << std::endl;
+					break;
+
+				case STRAIT + 1:
+					std::cout << "Strait" << std::endl;
+					break;
+
+				case FLUSH + 1:
+					std::cout << "Flush" << std::endl;
+					break;
+
+				case FULLHOUSE + 1:
+					std::cout << "Full House" << std::endl;
+					break;
+				case FOURKIND + 1:
+					std::cout << "Four of a Kind" << std::endl;
+					break;
+				case STRAITFLUSH + 1:
+					std::cout << "Strait Flush" << std::endl;
+					break;
+			}
+
 		}
 		//Print all Cards
 
