@@ -18,9 +18,9 @@ struct Card{
 	//map { "Clubs", "Diamonds", "Hearts", "Spades" };
 	static const char* suitMap[4]; 
 	//made the underlying type an int so that I could compare two cards rank easilly
-	enum  RANK{two, three, four, five, six, seven, eight, nine, ten, jack, queen, king, ace};//Somecode will access the buffer rank, rather than check i have this buffer. Save code. Since no card can ever have a rank of buffer it is fine. 
+	enum  RANK{two=1, three, four, five, six, seven, eight, nine, ten, jack, queen, king, ace};//Somecode will access the buffer rank, rather than check i have this buffer. Save code. Since no card can ever have a rank of buffer it is fine. 
 	// map Ranks to string
-	static const char* rankMap[13];
+	static const char* rankMap[14];
 	SUIT suit;
 	RANK rank;
 
