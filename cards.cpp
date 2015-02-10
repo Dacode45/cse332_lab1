@@ -154,7 +154,7 @@ int parseCardFile(const char* filename, std::vector<Card> &cards){
 	std::ifstream in(filename);
 	std::string line;
 	if (in.is_open()){
-		
+		in >> std::ws;
 		while (std::getline(in, line)){
 				
 			if (in.fail()){
@@ -163,9 +163,14 @@ int parseCardFile(const char* filename, std::vector<Card> &cards){
 				toReturn = ERRORDURINGFILEREADING;
 			}
 			
+			
 				std::istringstream iss(line);
+				if (iss.rdbuf()->in_avail() == 0){
+					continue;
+				}
 				std::vector<Card> hand;
 
+				int cardsAdded = 0;
 				char rankChar, suitChar;
 				iss >> std::ws;
 				while (iss >> rankChar){
@@ -197,19 +202,22 @@ int parseCardFile(const char* filename, std::vector<Card> &cards){
 						continue;
 					}
 					Card c(s, r);
+					
 					hand.push_back(c);
+					cardsAdded++;
+					
 				}
 				
-				if (hand.size() != 5){
+				if (cardsAdded != 5){
 					
-					handleErrMessages(program_name, "Hands should only have 5 cards");
+					handleErrMessages(program_name, ("Hands should only have 5 cards: "+line).c_str());
 					toReturn = BADNUMBEROFCARDSINHAND;
 				}
 				else{
 					std::move(hand.begin(), hand.end(), std::back_inserter(cards));
 				}
 			
-	
+				in >> std::ws;
 		}
 		in.close();
 		return toReturn;
@@ -453,10 +461,7 @@ int printCards( std::vector<Card> &cards){
 		for (auto it = hands.begin(); it != hands.end(); it++){
 			
 			auto h = *it;
-			for (auto i = h.begin(); i != h.end(); ++i){
-				std::cout << Card::rankMap[i->rank] << Card::suitMap[i->suit] << " ";
-			}
-			std::cout << std::endl;
+			
 
 			unsigned int hand_value = (unsigned int)std::ceil(((float)checkHand(h)) / ((float)(CARDWEIGHT_TOTAL)));
 
@@ -534,27 +539,27 @@ void handleErrMessages(const char* pName, int err){
 
 		break;
 	case CANTOPENFILE://CANTOPENFILE:
-		std::cout << "Couldn't Open File. May not Exist\n";
+		std::cout << "\nCouldn't Open File. May not Exist\n";
 		usageMessage(pName);
 		break;
 	case IMPROPERFILEFORMAT://IMPROPERFILEFORMAT:
-		std::cout << "Card Format incorrect. Check Readme on the format\n";
+		std::cout << "\nCard Format incorrect. Check Readme on the format\n";
 		break;
 	case ERRORDURINGFILEREADING:// ERRORDURINGFILEREADING:
-		std::cout << "File opened, but there was an error while reading. File may be currupt\n";
+		std::cout << "\nFile opened, but there was an error while reading. File may be currupt\n";
 		break;
 	case FAILEDTOPRINTUSAGE://FAILEDTOPRINTUSAGE:
-		std::cout << "This should never ever happen. Failed to print usage message\n";
+		std::cout << "\nThis should never ever happen. Failed to print usage message\n";
 		break;
 	case PRINTEDUSAGEMESSAGE://PRINTEDUSAGEMESSAGE:
-		std::cout << "Printed Usage Message \n";
+		std::cout << "\nPrinted Usage Message \n";
 		break;
 
 	case FAILEDTOPRINTCARDS: //FAILEDTOPRINTCARDS
-		std::cout << "This should not happen. C++ error: Unable to access vector<Cards>.\n";
+		std::cout << "\nThis should not happen. C++ error: Unable to access vector<Cards>.\n";
 		break;
 	case BADNUMBEROFCARDSINHAND: //BADNUMBEROFCARDSINHAND
-		std::cout << "There should only ever be 5 cards in your hand at a time. no more no less\n";
+		std::cout << "\nThere should only ever be 5 cards in your hand at a time. no more no less\n";
 		break;
 	default:
 		break;
