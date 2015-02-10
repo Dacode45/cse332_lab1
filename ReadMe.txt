@@ -44,3 +44,21 @@ KH   10H 3H 2H 8H // flush
 9c QD 10c 10D 9s // two pairs
 
 This has comments, invalid hands, spaces, and all ranks.
+
+How extra credit works
+How it works.
+Each card gets a weight depending on the individual ranking scheme for that hand
+The weight is multiplied by the rank to determin that cards value. Values are added
+cards with a higher value are better hands than cards with a lesser value.
+For this to work the weights must satisfy the inequality
+a> 13*b + 13*c + 13*d+e; b> 13*c + 13*d + 13*e; c > 13*d + 13*e
+setting e to 1
+d = 14, c = 196, b = 2744, a = 38416 satisfies this inequality.
+The max rank for a hand is therefore a+b+c+d+e or 537823.
+I can order the hands by multiplying a rank by some integer below
+This allows me to sort and check if hands are equal.
+*/
+1)Assign each hand an unsinged int.
+2)Sort hands by assignement.
+3)Badabing badabomb hands are sorted and can compare to each other
+using an if
